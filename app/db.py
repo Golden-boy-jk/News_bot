@@ -27,39 +27,34 @@ def _create_news_table(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS news (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT UNIQUE NOT NULL,
+            url TEXT,
             title TEXT,
             summary TEXT,
-            content TEXT NOT NULL,
+            content TEXT,
             source TEXT,
             score REAL,
-            fetched_at TEXT NOT NULL
+            fetched_at TEXT
         );
         """
     )
 
 
-def _migrate_news_table(conn: sqlite3.Connection) -> None:
-    """
-    Простая миграция: если нет нужных колонок — добавляем через ALTER TABLE.
-    """
+def _migrate_news_table(conn):
     cur = conn.execute("PRAGMA table_info(news);")
-    existing_cols = {row[1] for row in cur.fetchall()}
+    existing_columns = {row[1] for row in cur.fetchall()}
 
-    needed_cols = {
-        "url": "TEXT UNIQUE NOT NULL",
+    needed_columns = {
+        "url": "TEXT",
         "title": "TEXT",
         "summary": "TEXT",
-        "content": "TEXT NOT NULL",
+        "content": "TEXT",
         "source": "TEXT",
         "score": "REAL",
-        "fetched_at": "TEXT NOT NULL",
+        "fetched_at": "TEXT",
     }
 
-    for col_name, col_def in needed_cols.items():
-        if col_name not in existing_cols:
-            # Для NOT NULL колонок без default SQLite потребует значение при insert,
-            # но мы будем всегда их задавать в коде.
+    for col_name, col_def in needed_columns.items():
+        if col_name not in existing_columns:
             conn.execute(f"ALTER TABLE news ADD COLUMN {col_name} {col_def};")
 
 
