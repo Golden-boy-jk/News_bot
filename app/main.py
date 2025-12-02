@@ -1,0 +1,14 @@
+# app/main.py
+from .config import settings
+from .news_professor import NewsProfessor
+from .logging_utils import setup_logging
+
+
+def main():
+    setup_logging()
+    professor = NewsProfessor(db_path=settings.database_path)
+    professor.run_for_today()
+
+
+if __name__ == "__main__":
+    main()
