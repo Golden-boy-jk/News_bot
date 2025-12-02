@@ -25,12 +25,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run tests with coverage
         env:
-          # На всякий случай пробрасываем фейковые токены,
-          # но conftest.py и так подставит значения.
           TELEGRAM_BOT_TOKEN: "ci-test-token"
           TELEGRAM_CHAT_ID: "123456"
           TELEGRAM_ERROR_CHAT_ID: "123456"
         run: |
-          pytest -q
+          pytest
