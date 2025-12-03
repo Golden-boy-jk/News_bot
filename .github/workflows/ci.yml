@@ -25,10 +25,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (100% required)
         env:
           TELEGRAM_BOT_TOKEN: "ci-test-token"
           TELEGRAM_CHAT_ID: "123456"
           TELEGRAM_ERROR_CHAT_ID: "123456"
         run: |
-          pytest
+          pytest --cov-fail-under=100
