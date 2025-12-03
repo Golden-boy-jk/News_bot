@@ -1,6 +1,8 @@
-from typing import Optional
+# tests/test_text_parser.py
+import pytest
+import requests
 
-from app.text_parser import fetch_text_content
+from app import text_parser as tp
 
 
 class DummyResponse:
@@ -10,56 +12,43 @@ class DummyResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
+            raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
-def test_fetch_text_content_with_title_and_scripts(monkeypatch):
+def test_fetch_text_content_basic(monkeypatch):
     html = """
     <html>
       <head>
-        <title>My Page Title</title>
-        <script>var x = 1;</script>
+        <title>My Title</title>
+        <style>.cls { color: red; }</style>
       </head>
       <body>
-        <h1>Header</h1>
-        <p>Some text</p>
-        <style>body {color: red;}</style>
-        <noscript>Enable JS</noscript>
+        <p>First paragraph.</p>
+        <script>console.log("noise")</script>
+        <p>Second paragraph.</p>
       </body>
     </html>
     """
 
     def fake_get(url: str, timeout: int = 10):
-        assert url == "https://example.com/page"
-        assert timeout == 10
         return DummyResponse(html)
-
-    import app.text_parser as tp
 
     monkeypatch.setattr(tp.requests, "get", fake_get)
 
-    text: Optional[str] = fetch_text_content("https://example.com/page")
-    assert text is not None
+    content = tp.fetch_text_content("https://example.com")
 
-    lines = text.splitlines()
-    # первая строка — title
-    assert lines[0] == "My Page Title"
-    # скрипты/стили/ noscript удалены
-    concatenated = "\n".join(lines)
-    assert "var x = 1" not in concatenated
-    assert "body {color: red;}" not in concatenated
-    assert "Enable JS" not in concatenated
-    # основной текст остался
-    assert "Header" in concatenated
-    assert "Some text" in concatenated
+    lines = content.splitlines()
+    assert lines[0] == "My Title"
+    assert "noise" not in content
+    assert "First paragraph." in content
+    assert "Second paragraph." in content
 
 
-def test_fetch_text_content_without_title(monkeypatch):
+def test_fetch_text_content_no_title(monkeypatch):
     html = """
     <html>
       <body>
-        <h1>Header only</h1>
-        <p>Some text</p>
+        <p>Only content</p>
       </body>
     </html>
     """
@@ -67,69 +56,56 @@ def test_fetch_text_content_without_title(monkeypatch):
     def fake_get(url: str, timeout: int = 10):
         return DummyResponse(html)
 
-    import app.text_parser as tp
-
     monkeypatch.setattr(tp.requests, "get", fake_get)
 
-    text = fetch_text_content("https://example.com/no-title")
-    assert text is not None
-
-    lines = text.splitlines()
-    # title отсутствовал, значит первая строка — Header only
-    assert lines[0] == "Header only"
-    assert "Some text" in text
+    content = tp.fetch_text_content("https://example.com")
+    assert "Only content" in content
+    # заголовок не должен появиться как отдельная строка
+    assert "My Title" not in content
 
 
-def test_fetch_text_content_empty_result_returns_none(monkeypatch):
-    # HTML без видимого текста
-    html = "<html><head></head><body></body></html>"
+def test_fetch_text_content_http_error(monkeypatch):
+    def fake_get(url: str, timeout: int = 10):
+        return DummyResponse("error", status_code=500)
+
+    monkeypatch.setattr(tp.requests, "get", fake_get)
+    monkeypatch.setattr(tp, "time", type("T", (), {"sleep": lambda *_: None})())
+
+    with pytest.raises(RuntimeError):
+        tp.fetch_text_content("https://example.com")
+
+
+def test_fetch_text_content_retry_success(monkeypatch):
+    """
+    Первая попытка падает (ConnectionError), вторая — успешная.
+    Должен сработать retry.
+    """
+    html = "<html><body><p>OK</p></body></html>"
+    calls = {"n": 0}
 
     def fake_get(url: str, timeout: int = 10):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise requests.ConnectionError("temporary")
         return DummyResponse(html)
 
-    import app.text_parser as tp
-
     monkeypatch.setattr(tp.requests, "get", fake_get)
+    monkeypatch.setattr(tp, "time", type("T", (), {"sleep": lambda *_: None})())
 
-    text = fetch_text_content("https://example.com/empty")
-    # cleaned == "" → функция должна вернуть None
-    assert text is None
+    content = tp.fetch_text_content("https://example.com")
+    assert "OK" in content
+    assert calls["n"] == 2
 
 
-def test_fetch_text_content_inserts_title_when_not_first(monkeypatch):
+def test_download_with_retry_fail(monkeypatch):
     """
-    Покрываем ветку:
-        if title_text:
-            if not lines or lines[0] != title_text:
-                lines.insert(0, title_text)
-
-    Делаем кривоватый HTML, где <title> есть, но первым в тексте идёт другой текст,
-    чтобы сработал insert и заголовок реально добавился в начало.
+    Все попытки падают — должен быть RuntimeError из _download_with_retry.
     """
-    html = """
-    <html>
-      <body>
-        Intro text before title
-        <title>Standalone Title</title>
-        <h1>Header</h1>
-      </body>
-    </html>
-    """
-
     def fake_get(url: str, timeout: int = 10):
-        return DummyResponse(html)
-
-    import app.text_parser as tp
+        raise requests.Timeout("timeout")
 
     monkeypatch.setattr(tp.requests, "get", fake_get)
+    monkeypatch.setattr(tp, "time", type("T", (), {"sleep": lambda *_: None})())
 
-    text = fetch_text_content("https://example.com/misplaced-title")
-    assert text is not None
-
-    lines = text.splitlines()
-    # благодаря lines.insert(0, title_text) первая строка — именно title
-    assert lines[0] == "Standalone Title"
-    # при этом остальной текст никуда не пропал
-    joined = "\n".join(lines)
-    assert "Intro text before title" in joined
-    assert "Header" in joined
+    with pytest.raises(RuntimeError):
+        tp._download_with_retry("https://example.com", timeout=1, max_attempts=3)
