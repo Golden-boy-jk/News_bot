@@ -7,11 +7,13 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from .config import settings
 from .db import (
-    get_news_by_urls,
     init_db,
     link_exists,
     save_news,
+    get_news_by_urls,
+    get_last_news,
 )
+
 from .filters import filter_link_by_substring
 from .link_extractor import extract_links_from_url
 from .logging_utils import log_error, log_info, log_warning
@@ -477,6 +479,54 @@ class NewsProfessor:
                 text=msg,
             )
             log_info("Воскресный дайджест недели опубликован.")
+
+    def run_monitoring(self, max_days_without_news: int = 3) -> None:
+        """
+        Простая задача мониторинга:
+        - проверяет, есть ли вообще новости в БД;
+        - проверяет, когда была сохранена последняя новость;
+        - если не было новых новостей дольше max_days_without_news дней — шлёт алерт.
+        """
+        rows = get_last_news(self.db_path, limit=1)
+        if not rows:
+            msg = (
+                "Мониторинг: в базе новостей нет ни одной записи. "
+                "Возможно, сборщик не сохраняет статьи или ни разу не запускался."
+            )
+            log_error(msg, alert=True)
+            return
+
+        # rows: (url, title, summary, content, source, score, fetched_at)
+        _, _, _, _, _, _, fetched_at_str = rows[0]
+
+        if not fetched_at_str:
+            log_warning("Мониторинг: у последней новости отсутствует fetched_at.")
+            return
+
+        try:
+            last_dt = datetime.fromisoformat(fetched_at_str)
+        except Exception:
+            log_warning(
+                f"Мониторинг: не удалось разобрать fetched_at='{fetched_at_str}'."
+            )
+            return
+
+        now_utc = datetime.utcnow()
+        delta = now_utc - last_dt
+
+        if delta.days >= max_days_without_news:
+            msg = (
+                f"Мониторинг: не было новых новостей уже {delta.days} дн. "
+                f"Последняя новость сохранена {fetched_at_str}."
+            )
+            log_error(msg, alert=True)
+        else:
+            log_info(
+                f"Мониторинг: ок, последняя новость от {fetched_at_str}, "
+                f"прошло {delta.days} дн."
+            )
+
+
 
     def build_weekly_digest_items(self, days_back: int = 7, limit: int = 8) -> List[dict]:
         """

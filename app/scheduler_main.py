@@ -1,13 +1,10 @@
 # app/scheduler_main.py
-import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .config import settings
-from .logging_utils import log_error, log_info, setup_logging
 from .news_professor import NewsProfessor
-
-MOSCOW_TZ = pytz.timezone("Europe/Moscow")
+from .logging_utils import setup_logging, log_info, log_error
 
 
 def job_daily_news():
@@ -18,16 +15,35 @@ def job_daily_news():
         log_error(f"Критическая ошибка в job_daily_news: {e}", alert=True)
 
 
+def job_monitoring():
+    """
+    Ежедневная задача мониторинга:
+    - проверяет свежесть новостей;
+    - при необходимости отправляет алерты.
+    """
+    professor = NewsProfessor(db_path=settings.database_path)
+    try:
+        professor.run_monitoring()
+    except Exception as e:
+        log_error(f"Критическая ошибка в job_monitoring: {e}", alert=True)
+
+
 def main():
     setup_logging()
-    # Явно используем pytz-таймзону, чтобы APScheduler мог вызвать .normalize()
-    scheduler = BlockingScheduler(timezone=MOSCOW_TZ)
+    scheduler = BlockingScheduler(timezone="Europe/Moscow")
 
-    # Каждый день в 09:00 по Москве
-    trigger = CronTrigger(hour=9, minute=0, timezone=MOSCOW_TZ)
-    scheduler.add_job(job_daily_news, trigger, id="daily_news_job")
+    # Каждый день в 09:00 по Москве — основной запуск новостей
+    trigger_news = CronTrigger(hour=9, minute=0)
+    scheduler.add_job(job_daily_news, trigger_news, id="daily_news_job")
 
-    log_info("Планировщик запущен. Ожидаю ежедневный запуск в 09:00 (Europe/Moscow).")
+    # Каждый день в 10:00 по Москве — мониторинг
+    trigger_monitor = CronTrigger(hour=10, minute=0)
+    scheduler.add_job(job_monitoring, trigger_monitor, id="monitoring_job")
+
+    log_info(
+        "Планировщик запущен. "
+        "Ежедневный запуск новостей в 09:00 и мониторинга в 10:00 (Europe/Moscow)."
+    )
     scheduler.start()
 
 
