@@ -683,3 +683,34 @@ def test_run_for_today_sunday_digest(monkeypatch, tmp_path):
     ]
 
 
+def test_build_weekly_digest_items_default_source_tag(monkeypatch, tmp_path):
+    import app.news_professor as np
+    from app import db as db_module
+
+    monkeypatch.setattr(np, "init_db", lambda db_path: None)
+
+    # источник не входит ни в один из известных наборов → должен быть #НовостиIT
+    rows = [
+        (
+            "https://other",
+            "Other title",
+            "Other summary",
+            "Other content",
+            "weird_source",  # неизвестный source
+            0.7,
+            "2025-01-01T00:00:00",
+        )
+    ]
+
+    monkeypatch.setattr(
+        db_module,
+        "get_top_news_for_period",
+        lambda *a, **k: rows,
+    )
+
+    prof = NewsProfessor(db_path=str(tmp_path / "news.db"))
+    items = prof.build_weekly_digest_items(days_back=7, limit=5)
+
+    assert len(items) == 1
+    assert items[0]["url"] == "https://other"
+    assert items[0]["source_tag"] == "#НовостиIT"

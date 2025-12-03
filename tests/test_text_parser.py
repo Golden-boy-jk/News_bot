@@ -93,3 +93,41 @@ def test_fetch_text_content_empty_result_returns_none(monkeypatch):
     text = fetch_text_content("https://example.com/empty")
     # cleaned == "" → функция должна вернуть None
     assert text is None
+
+
+def test_fetch_text_content_inserts_title_when_not_first(monkeypatch):
+    """
+    Покрываем ветку:
+        if title_text:
+            if not lines or lines[0] != title_text:
+                lines.insert(0, title_text)
+
+    Делаем кривоватый HTML, где <title> есть, но первым в тексте идёт другой текст,
+    чтобы сработал insert и заголовок реально добавился в начало.
+    """
+    html = """
+    <html>
+      <body>
+        Intro text before title
+        <title>Standalone Title</title>
+        <h1>Header</h1>
+      </body>
+    </html>
+    """
+
+    def fake_get(url: str, timeout: int = 10):
+        return DummyResponse(html)
+
+    import app.text_parser as tp
+    monkeypatch.setattr(tp.requests, "get", fake_get)
+
+    text = fetch_text_content("https://example.com/misplaced-title")
+    assert text is not None
+
+    lines = text.splitlines()
+    # благодаря lines.insert(0, title_text) первая строка — именно title
+    assert lines[0] == "Standalone Title"
+    # при этом остальной текст никуда не пропал
+    joined = "\n".join(lines)
+    assert "Intro text before title" in joined
+    assert "Header" in joined

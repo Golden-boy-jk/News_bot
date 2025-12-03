@@ -18,6 +18,21 @@ def test_setup_logging_adds_handler(monkeypatch):
     assert isinstance(handler, logging.StreamHandler)
 
 
+def test_log_info_uses_logger_info(monkeypatch):
+    import app.logging_utils as lu
+
+    calls = []
+
+    def fake_info(msg):
+        calls.append(msg)
+
+    monkeypatch.setattr(lu.logger, "info", fake_info)
+
+    lu.log_info("hello info")
+
+    assert calls == ["hello info"]
+
+
 def test_log_warning_uses_logger_warning(monkeypatch):
     import app.logging_utils as lu
 
