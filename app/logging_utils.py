@@ -4,7 +4,6 @@ import sys
 
 from .error_notifier import send_error_alert
 
-
 logger = logging.getLogger("news_bot")
 
 

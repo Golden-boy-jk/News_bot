@@ -1,13 +1,11 @@
 from types import SimpleNamespace
 
-import pytest
-
 from app.telegram_bot import (
-    split_title_and_body,
     format_news_message,
-    send_message,
     format_tools_digest_message,
     format_weekly_digest_message,
+    send_message,
+    split_title_and_body,
 )
 
 
@@ -18,9 +16,7 @@ class DummyBotSuccess:
 
     def send_message(self, chat_id: str, text: str, parse_mode: str = None):
         # сохраняем параметры отправки, чтобы можно было проверить
-        self.sent.append(
-            {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
-        )
+        self.sent.append({"chat_id": chat_id, "text": text, "parse_mode": parse_mode})
         # имитируем объект Message c полем message_id
         return SimpleNamespace(message_id=123)
 
@@ -31,6 +27,7 @@ class DummyBotError:
 
     def send_message(self, chat_id: str, text: str, parse_mode: str = None):
         from telegram.error import TelegramError
+
         raise TelegramError("fail")
 
 

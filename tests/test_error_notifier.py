@@ -1,7 +1,3 @@
-# tests/test_error_notifier.py
-from types import SimpleNamespace
-
-
 def test_send_error_alert_success(monkeypatch, capsys):
     """
     Happy-path: Bot.send_message вызывается с правильными аргументами,

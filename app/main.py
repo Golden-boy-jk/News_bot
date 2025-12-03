@@ -1,7 +1,7 @@
 # app/main.py
 from .config import settings
-from .news_professor import NewsProfessor
 from .logging_utils import setup_logging
+from .news_professor import NewsProfessor
 
 
 def main():

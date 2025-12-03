@@ -1,0 +1,19 @@
+services:
+  news-bot:
+    build: .
+    container_name: news-bot
+    restart: unless-stopped
+    # .env лежит рядом с docker-compose.yml
+    env_file:
+      - .env
+    # пробрасываем файл БД наружу
+    volumes:
+      - ./news.db:/app/news.db
+    # можно переопределить команду при необходимости:
+    # command: ["python", "-m", "app.main"]
+    healthcheck:
+      test: [ "CMD", "python", "-m", "app.healthcheck" ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

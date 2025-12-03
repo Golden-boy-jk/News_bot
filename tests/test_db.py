@@ -1,15 +1,15 @@
 # tests/test_db.py
-from typing import List, Tuple
 import sqlite3
+from typing import List, Tuple
 
 from app.db import (
+    get_last_news,
+    get_news_by_urls,
+    get_top_news_for_period,
     init_db,
     link_exists,
     save_news,
     update_score,
-    get_last_news,
-    get_news_by_urls,
-    get_top_news_for_period,
 )
 
 
@@ -19,9 +19,7 @@ def test_init_db_creates_table(tmp_path):
 
     conn = sqlite3.connect(db_path)
     try:
-        cur = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='news';"
-        )
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='news';")
         assert cur.fetchone() is not None
     finally:
         conn.close()
@@ -68,8 +66,8 @@ def test_init_db_second_call_runs_migration(tmp_path):
     второй вызов -> _migrate_news_table (ветка else).
     """
     db_path = tmp_path / "news.db"
-    init_db(str(db_path))   # создаём таблицу
-    init_db(str(db_path))   # должна пройти миграция, но без ошибок
+    init_db(str(db_path))  # создаём таблицу
+    init_db(str(db_path))  # должна пройти миграция, но без ошибок
 
     conn = sqlite3.connect(db_path)
     try:

@@ -1,8 +1,7 @@
 # app/scoring.py
-from typing import List, Dict
+from typing import Dict, List
 
 from sklearn.feature_extraction.text import TfidfVectorizer
-
 
 # Ключевые слова и их веса (можно расширять)
 KEYWORD_WEIGHTS: Dict[str, float] = {

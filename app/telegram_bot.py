@@ -1,14 +1,15 @@
 # app/telegram_bot.py
-from typing import Optional, Tuple, List, Dict
+from typing import Dict, List, Optional, Tuple
 
 from telegram import Bot
 from telegram.error import TelegramError
 
-from .text_utils import truncate_message
 from .logging_utils import log_error
+from .text_utils import truncate_message
+
 
 def split_title_and_body(content: str) -> Tuple[str, str]:
-    lines = [l.strip() for l in content.splitlines() if l.strip()]
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
     if not lines:
         return "Свежая новость из мира IT", ""
 
@@ -58,6 +59,7 @@ def send_message(bot_token: str, chat_id: str, text: str) -> Optional[str]:
     except TelegramError as e:
         log_error(f"Ошибка отправки сообщения в Telegram: {e}", alert=True)
         return None
+
 
 def format_tools_digest_message(tools: List[Dict]) -> str:
     """
@@ -127,11 +129,7 @@ def format_weekly_digest_message(events: List[Dict]) -> str:
         url = ev.get("url") or ""
         source_tag = ev.get("source_tag") or "#НовостиIT"
 
-        block = (
-            f"{idx}) **{title}** {source_tag}\n"
-            f"   {summary}\n"
-            f"   🔗 {url}\n"
-        )
+        block = f"{idx}) **{title}** {source_tag}\n" f"   {summary}\n" f"   🔗 {url}\n"
         blocks.append(block)
 
     what_happened = intro + "\n".join(blocks)

@@ -3,22 +3,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, List, Dict, Tuple, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .config import settings
 from .db import (
+    get_news_by_urls,
     init_db,
     link_exists,
     save_news,
-    get_news_by_urls,
 )
 from .filters import filter_link_by_substring
 from .link_extractor import extract_links_from_url
-from .text_parser import fetch_text_content
-from .telegram_bot import format_news_message, send_message
+from .logging_utils import log_error, log_info, log_warning
 from .scoring import compute_tfidf_scores
-from .logging_utils import log_info, log_warning, log_error
-
+from .telegram_bot import format_news_message, send_message
+from .text_parser import fetch_text_content
 
 # ---------- Наборы сайтов под тематику ----------
 
@@ -64,13 +63,7 @@ SITES_DEVTOOLS: List[str] = [
 SITES_TOOLS_DAY: List[str] = SITES_DEVTOOLS + SITES_PYTHON
 
 # Воскресенье — дайджест (всё подряд)
-ALL_SITES: List[str] = (
-    SITES_AI
-    + SITES_PYTHON
-    + SITES_DATA_ENG
-    + SITES_SECURITY
-    + SITES_DEVTOOLS
-)
+ALL_SITES: List[str] = SITES_AI + SITES_PYTHON + SITES_DATA_ENG + SITES_SECURITY + SITES_DEVTOOLS
 
 
 @dataclass
@@ -81,6 +74,7 @@ class ContentPlanConfig:
     - substring: фильтр по URL (обычно /2025/)
     - max_fetch: сколько максимум новых статей за раз сохраняем
     """
+
     sites: List[str]
     substring: str
     max_fetch: int
@@ -127,13 +121,13 @@ CONTENT_PLAN: Dict[int, ContentPlanConfig] = {
 
 
 DAY_TOPIC_TAGS: Dict[int, Dict[str, str]] = {
-    0: {"topic_tag": "#AI", "source_tag": "#Нейросети"},        # Пн
-    1: {"topic_tag": "#Python", "source_tag": "#Разработка"},   # Вт
+    0: {"topic_tag": "#AI", "source_tag": "#Нейросети"},  # Пн
+    1: {"topic_tag": "#Python", "source_tag": "#Разработка"},  # Вт
     2: {"topic_tag": "#DataEngineering", "source_tag": "#BigData"},  # Ср
     3: {"topic_tag": "#Security", "source_tag": "#DevSecOps"},  # Чт
-    4: {"topic_tag": "#Tools", "source_tag": "#DevTools"},      # Пт
-    5: {"topic_tag": "#Tools", "source_tag": "#Подборка"},      # Сб
-    6: {"topic_tag": "#Digest", "source_tag": "#Дайджест"},     # Вс
+    4: {"topic_tag": "#Tools", "source_tag": "#DevTools"},  # Пт
+    5: {"topic_tag": "#Tools", "source_tag": "#Подборка"},  # Сб
+    6: {"topic_tag": "#Digest", "source_tag": "#Дайджест"},  # Вс
 }
 
 
@@ -198,7 +192,7 @@ def split_title_and_summary(content: str) -> Tuple[Optional[str], Optional[str]]
     """
     Берём первую строку как title, следующие 2–3 строки склеиваем в summary.
     """
-    lines = [l.strip() for l in content.splitlines() if l.strip()]
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
     if not lines:
         return None, None
 
@@ -210,22 +204,31 @@ def split_title_and_summary(content: str) -> Tuple[Optional[str], Optional[str]]
 
 def build_tool_use_case(source: str) -> str:
     """
-    Простейшая эвристика по источнику для юзкейса.
+    Простая эвристика по источнику для юзкейса.
     Можно потом усложнить по ключевым словам.
     """
     src = (source or "other").lower()
 
     if src in {"github_blog"}:
-        return "Следить за новыми возможностями GitHub и улучшать свой workflow с репозиториями и CI/CD."
+        return (
+            "Следить за новыми возможностями GitHub "
+            "и улучшать свой workflow с репозиториями и CI/CD."
+        )
+
     if src in {"vscode_updates"}:
-        return "Получать новые фичи в VS Code и прокачивать удобство ежедневного кодинга."
+        return "Получать новые фичи в VS Code " "и прокачивать удобство ежедневного кодинга."
+
     if src in {"docker_blog"}:
-        return "Упростить контейнеризацию приложений и работу с окружениями через Docker."
+        return "Упростить контейнеризацию приложений " "и работу с окружениями через Docker."
+
     if src in {"python_org", "realpython", "pycharm_blog", "python_weekly"}:
-        return "Прокачать разработку на Python и отслеживать новые фичи экосистемы."
+        return "Прокачать разработку на Python " "и отслеживать новые фичи экосистемы."
+
     if src in {"databricks", "confluent", "aws_bigdata"}:
-        return "Упростить работу с data-пайплайнами, стримингом и аналитикой больших данных."
-    return "Поможет упростить повседневную работу разработчика и сэкономить время."
+        return "Упростить работу с data-пайплайнами, стримингом " "и аналитикой больших данных."
+
+    # 🔥 ВАЖНО: default вариант ВСЕГДА должен быть последним return
+    return "Поможет упростить повседневную " "работу разработчика и сэкономить время."
 
 
 class NewsProfessor:
@@ -318,9 +321,7 @@ class NewsProfessor:
         return [url for url, *_ in new_articles]
 
     def publish_top_news(self, new_urls: List[str], max_to_publish: int = 5) -> None:
-        """
-        Берём только что сохранённые новости, сортируем по score и публикуем топ-N.
-        """
+
         if not new_urls:
             log_info("Новых новостей нет, публиковать нечего.")
             return
@@ -342,7 +343,14 @@ class NewsProfessor:
         topic_tag = tags["topic_tag"]
         default_source_tag = tags["source_tag"]
 
-        for score, url, title, summary, content, source, in top:
+        for (
+            score,
+            url,
+            title,
+            summary,
+            content,
+            source,
+        ) in top:
             if source in {"openai", "anthropic", "huggingface", "stability_ai", "google_ai_blog"}:
                 source_tag = "#AI"
             elif source in {"python_org", "realpython", "pycharm_blog", "python_weekly"}:
@@ -385,13 +393,15 @@ class NewsProfessor:
         # rows: (url, title, summary, content, source, score)
         items = []
         for url, title, summary, content, source, score in rows:
-            items.append({
-                "url": url,
-                "title": (title or "Новый инструмент")[:120],
-                "summary": (summary or "").strip()[:250],
-                "source": source or "other",
-                "score": score or 0.0,
-            })
+            items.append(
+                {
+                    "url": url,
+                    "title": (title or "Новый инструмент")[:120],
+                    "summary": (summary or "").strip()[:250],
+                    "source": source or "other",
+                    "score": score or 0.0,
+                }
+            )
 
         # сортируем по score
         items.sort(key=lambda x: x["score"], reverse=True)
@@ -410,7 +420,6 @@ class NewsProfessor:
                 it["source_tag"] = "#Tools"
 
         return items
-
 
     def run_for_today(self) -> None:
         """
@@ -474,7 +483,9 @@ class NewsProfessor:
         Собирает топ событий за N дней для воскресного дайджеста.
         Возвращает список элементов {title, summary, url, source_tag}.
         """
-        from .db import get_top_news_for_period  # локальный импорт, чтобы избежать циклических
+        from .db import (
+            get_top_news_for_period,  # локальный импорт, чтобы избежать циклических
+        )
 
         rows = get_top_news_for_period(self.db_path, days_back=days_back, limit=limit)
         if not rows:
@@ -497,13 +508,15 @@ class NewsProfessor:
             else:
                 source_tag = "#НовостиIT"
 
-            items.append({
-                "url": url,
-                "title": (title or "Событие недели")[:140],
-                "summary": (summary or "").strip()[:260],
-                "source_tag": source_tag,
-                "score": score or 0.0,
-            })
+            items.append(
+                {
+                    "url": url,
+                    "title": (title or "Событие недели")[:140],
+                    "summary": (summary or "").strip()[:260],
+                    "source_tag": source_tag,
+                    "score": score or 0.0,
+                }
+            )
 
         # уже отсортировано по score в SQL, но на всякий случай:
         items.sort(key=lambda x: x["score"], reverse=True)

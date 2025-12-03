@@ -1,5 +1,5 @@
 # tests/test_text_utils.py
-from app.text_utils import truncate_message, TELEGRAM_LIMIT
+from app.text_utils import TELEGRAM_LIMIT, truncate_message
 
 
 def test_truncate_message_short_not_modified():

@@ -1,14 +1,12 @@
 # test_news_professor.py
 from typing import List, Optional
 
-import pytest
-
 from app.news_professor import (
     NewsProfessor,
+    build_tool_use_case,
     get_today_tags,
     guess_source_from_url,
     split_title_and_summary,
-    build_tool_use_case,
 )
 
 
@@ -79,6 +77,7 @@ def test_get_today_tags_uses_weekday(monkeypatch):
             class D:
                 def weekday(self_nonlocal):
                     return 1  # Вторник
+
             return D()
 
     monkeypatch.setattr(np, "datetime", DummyDateTime)
@@ -144,8 +143,9 @@ def test_fetch_and_store_new_articles_batch_happy_path(monkeypatch, tmp_path):
 
     saved = []
 
-    def fake_save_news(db_path: str, url: str, title: str, summary: str,
-                       content: str, source: str, score: float) -> None:
+    def fake_save_news(
+        db_path: str, url: str, title: str, summary: str, content: str, source: str, score: float
+    ) -> None:
         saved.append(
             {
                 "db_path": db_path,
@@ -160,10 +160,13 @@ def test_fetch_and_store_new_articles_batch_happy_path(monkeypatch, tmp_path):
 
     def fake_scores(texts: List[str]) -> List[float]:
         assert len(texts) == 1  # только new-tool
-        return [0.7]
+        return [0.7 for _ in texts]
 
-    monkeypatch.setattr(np, "filter_link_by_substring",
-                        lambda links, substring: [l for l in links if substring in l])
+    monkeypatch.setattr(
+        np,
+        "filter_link_by_substring",
+        lambda links, substring: [link for link in links if substring in link],
+    )
     monkeypatch.setattr(np, "link_exists", fake_link_exists)
     monkeypatch.setattr(np, "fetch_text_content", fake_fetch_text)
     monkeypatch.setattr(np, "save_news", fake_save_news)
@@ -282,8 +285,9 @@ def test_publish_top_news_sorts_and_sends(monkeypatch, tmp_path):
         return rows
 
     monkeypatch.setattr(np, "get_news_by_urls", fake_get_news_by_urls)
-    monkeypatch.setattr(np, "get_today_tags",
-                        lambda: {"topic_tag": "#TOPIC", "source_tag": "#DEFAULT"})
+    monkeypatch.setattr(
+        np, "get_today_tags", lambda: {"topic_tag": "#TOPIC", "source_tag": "#DEFAULT"}
+    )
 
     formatted_calls = []
     sent_messages = []
@@ -371,8 +375,7 @@ def test_publish_top_news_source_tags_all_topics(monkeypatch, tmp_path):
     ]
 
     monkeypatch.setattr(np, "get_news_by_urls", lambda db_path, urls: rows)
-    monkeypatch.setattr(np, "get_today_tags",
-                        lambda: {"topic_tag": "#TOP", "source_tag": "#DEF"})
+    monkeypatch.setattr(np, "get_today_tags", lambda: {"topic_tag": "#TOP", "source_tag": "#DEF"})
 
     formatted = []
 
@@ -383,10 +386,10 @@ def test_publish_top_news_source_tags_all_topics(monkeypatch, tmp_path):
     sent = []
 
     monkeypatch.setattr(np, "format_news_message", fake_format)
-    monkeypatch.setattr(np, "send_message",
-                        lambda bot_token, chat_id, text: sent.append(text))
-    monkeypatch.setattr(np, "settings",
-                        type("S", (), {"telegram_bot_token": "T", "telegram_chat_id": "C"}))
+    monkeypatch.setattr(np, "send_message", lambda bot_token, chat_id, text: sent.append(text))
+    monkeypatch.setattr(
+        np, "settings", type("S", (), {"telegram_bot_token": "T", "telegram_chat_id": "C"})
+    )
     monkeypatch.setattr(np, "log_info", lambda msg: None)
 
     prof = NewsProfessor(db_path=str(tmp_path / "news.db"))
@@ -440,8 +443,7 @@ def test_build_weekly_digest_items_empty_rows(monkeypatch, tmp_path):
     from app import db as db_module
 
     monkeypatch.setattr(np, "init_db", lambda db_path: None)
-    monkeypatch.setattr(db_module, "get_top_news_for_period",
-                        lambda *a, **k: [])
+    monkeypatch.setattr(db_module, "get_top_news_for_period", lambda *a, **k: [])
 
     prof = NewsProfessor(db_path=str(tmp_path / "news.db"))
     assert prof.build_weekly_digest_items(days_back=7, limit=5) == []
@@ -461,8 +463,7 @@ def test_build_weekly_digest_items_all_source_tags(monkeypatch, tmp_path):
         ("https://dev", "Dev", "S5", "C5", "github_blog", 0.5, "2025-01-01T00:00:00"),
     ]
 
-    monkeypatch.setattr(db_module, "get_top_news_for_period",
-                        lambda *a, **k: rows)
+    monkeypatch.setattr(db_module, "get_top_news_for_period", lambda *a, **k: rows)
 
     prof = NewsProfessor(db_path=str(tmp_path / "news.db"))
     items = prof.build_weekly_digest_items(days_back=7, limit=10)
@@ -485,7 +486,9 @@ def _dummy_datetime_with_weekday(value: int):
             class D:
                 def weekday(self_nonlocal):
                     return value
+
             return D()
+
     return DummyDateTime
 
 
@@ -554,27 +557,33 @@ def test_run_for_today_saturday_tools(monkeypatch):
     monkeypatch.setattr(np, "datetime", _dummy_datetime_with_weekday(5))  # Суббота
 
     monkeypatch.setattr(np.NewsProfessor, "collect_links", lambda self, sites: ["u1"])
-    monkeypatch.setattr(np.NewsProfessor, "fetch_and_store_new_articles_batch",
-                        lambda self, links, substring, max_to_fetch: ["u1"])
+    monkeypatch.setattr(
+        np.NewsProfessor,
+        "fetch_and_store_new_articles_batch",
+        lambda self, links, substring, max_to_fetch: ["u1"],
+    )
 
     infos = []
     monkeypatch.setattr(np, "log_info", lambda msg: infos.append(msg))
 
-    monkeypatch.setattr(np.NewsProfessor, "build_tools_digest_items",
-                        lambda self, new_urls, max_tools: [])
+    monkeypatch.setattr(
+        np.NewsProfessor, "build_tools_digest_items", lambda self, new_urls, max_tools: []
+    )
 
     prof = NewsProfessor(db_path=":memory:")
     prof.run_for_today()
     assert any("Нет новых тулзов" in m for m in infos)
 
     def build_tools(self, new_urls, max_tools):
-        return [{
-            "url": "https://tool",
-            "title": "Tool",
-            "summary": "",
-            "use_case": "",
-            "source_tag": "#DevTools",
-        }]
+        return [
+            {
+                "url": "https://tool",
+                "title": "Tool",
+                "summary": "",
+                "use_case": "",
+                "source_tag": "#DevTools",
+            }
+        ]
 
     monkeypatch.setattr(np.NewsProfessor, "build_tools_digest_items", build_tools)
 
@@ -599,6 +608,7 @@ def test_run_for_today_sunday_digest(monkeypatch, tmp_path):
             class D:
                 def weekday(self_nonlocal):
                     return 6
+
             return D()
 
     monkeypatch.setattr(np, "datetime", DummyDateTime)
@@ -678,9 +688,7 @@ def test_run_for_today_sunday_digest(monkeypatch, tmp_path):
     assert formatted_events[0][0]["url"] == "https://e1"
 
     # 3) в Telegram ушло одно сообщение с дайджестом
-    assert sent == [
-        {"token": "TOKEN", "chat_id": "CHAT", "text": "DIGEST_MSG"}
-    ]
+    assert sent == [{"token": "TOKEN", "chat_id": "CHAT", "text": "DIGEST_MSG"}]
 
 
 def test_build_weekly_digest_items_default_source_tag(monkeypatch, tmp_path):

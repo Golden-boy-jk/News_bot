@@ -4,6 +4,7 @@ lxml
 python-dotenv
 python-telegram-bot==13.15
 APScheduler==3.6.3
+pytz
 scikit-learn==1.5.0
 pytest
 pytest-cov

@@ -4,6 +4,7 @@ from .logging_utils import log_warning
 
 TELEGRAM_LIMIT = 4096
 
+
 def truncate_message(text: str, limit: int = TELEGRAM_LIMIT) -> str:
     """
     Универсальное ограничение длины текста под лимиты Telegram (4096 символов).

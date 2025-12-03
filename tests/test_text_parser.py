@@ -1,5 +1,3 @@
-# tests/test_text_parser.py
-from types import SimpleNamespace
 from typing import Optional
 
 from app.text_parser import fetch_text_content
@@ -37,6 +35,7 @@ def test_fetch_text_content_with_title_and_scripts(monkeypatch):
         return DummyResponse(html)
 
     import app.text_parser as tp
+
     monkeypatch.setattr(tp.requests, "get", fake_get)
 
     text: Optional[str] = fetch_text_content("https://example.com/page")
@@ -69,6 +68,7 @@ def test_fetch_text_content_without_title(monkeypatch):
         return DummyResponse(html)
 
     import app.text_parser as tp
+
     monkeypatch.setattr(tp.requests, "get", fake_get)
 
     text = fetch_text_content("https://example.com/no-title")
@@ -88,6 +88,7 @@ def test_fetch_text_content_empty_result_returns_none(monkeypatch):
         return DummyResponse(html)
 
     import app.text_parser as tp
+
     monkeypatch.setattr(tp.requests, "get", fake_get)
 
     text = fetch_text_content("https://example.com/empty")
@@ -119,6 +120,7 @@ def test_fetch_text_content_inserts_title_when_not_first(monkeypatch):
         return DummyResponse(html)
 
     import app.text_parser as tp
+
     monkeypatch.setattr(tp.requests, "get", fake_get)
 
     text = fetch_text_content("https://example.com/misplaced-title")

@@ -2,7 +2,7 @@
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from typing import Optional, Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 
 @contextmanager
@@ -117,7 +117,9 @@ def get_last_news(db_path: str, limit: int = 5):
         return cur.fetchall()
 
 
-def get_news_by_urls(db_path: str, urls: Iterable[str]) -> List[Tuple[str, str, str, str, Optional[str], Optional[float]]]:
+def get_news_by_urls(
+    db_path: str, urls: Iterable[str]
+) -> List[Tuple[str, str, str, str, Optional[str], Optional[float]]]:
     urls = list(urls)
     if not urls:
         return []

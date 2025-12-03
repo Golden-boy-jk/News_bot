@@ -1,6 +1,5 @@
 # tests/test_link_extractor.py
 from typing import List
-from types import SimpleNamespace
 
 import pytest
 
@@ -36,6 +35,7 @@ def test_extract_links_from_url_basic(monkeypatch):
         return DummyResponse(html)
 
     import app.link_extractor as le
+
     monkeypatch.setattr(le.requests, "get", fake_get)
 
     links: List[str] = extract_links_from_url("https://example.com")
@@ -56,6 +56,7 @@ def test_extract_links_from_url_no_links(monkeypatch):
         return DummyResponse(html)
 
     import app.link_extractor as le
+
     monkeypatch.setattr(le.requests, "get", fake_get)
 
     links = extract_links_from_url("https://example.com")
@@ -67,6 +68,7 @@ def test_extract_links_from_url_http_error(monkeypatch):
         return DummyResponse("error", status_code=500)
 
     import app.link_extractor as le
+
     monkeypatch.setattr(le.requests, "get", fake_get)
 
     with pytest.raises(RuntimeError):
