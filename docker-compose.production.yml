@@ -1,0 +1,40 @@
+services:
+  news-bot:
+    build: .
+    container_name: news-bot
+    restart: always
+
+    # Основные секреты и токены — через отдельный prod-файл
+    env_file:
+      - .env.prod
+
+    environment:
+      # Явно указываем путь к БД внутри контейнера
+      - DATABASE_PATH=/app/news.db
+
+      # Включаем файловое логирование и настраиваем директорию логов
+      - NEWS_BOT_FILE_LOGGING=1
+      - NEWS_BOT_LOG_DIR=/var/log/news_bot
+
+      # При желании можно переопределить ротацию:
+      # - NEWS_BOT_APP_LOG_MAX_BYTES=5242880        # 5 MB
+      # - NEWS_BOT_APP_LOG_BACKUP_COUNT=5
+      # - NEWS_BOT_ERROR_LOG_MAX_BYTES=5242880
+      # - NEWS_BOT_ERROR_LOG_BACKUP_COUNT=5
+
+    volumes:
+      # 1) SQLite-база как файл на хосте
+      # ВАЖНО: перед первым запуском:
+      #   mkdir -p data && touch data/news.db
+      - ./data/news.db:/app/news.db
+
+      # 2) Логи на хосте
+      - ./logs:/var/log/news_bot
+
+    # Healthcheck использует наш модуль healthcheck
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

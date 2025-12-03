@@ -1,111 +1,114 @@
-# tests/test_logging_utils.py
 import logging
+from logging.handlers import RotatingFileHandler
 
 
-def test_setup_logging_adds_handler(monkeypatch):
-    import app.logging_utils as lu
+def test_setup_logging_stdout_only(monkeypatch):
+    """
+    Если файловое логирование выключено, должен остаться только stdout-хендлер.
+    """
+    from app import logging_utils
 
-    # Сбрасываем handlers, чтобы тест был детерминированным
-    lu.logger.handlers.clear()
+    monkeypatch.setenv("NEWS_BOT_FILE_LOGGING", "0")
 
-    lu.setup_logging(level=logging.DEBUG)
+    logging_utils.setup_logging()
 
-    # После setup_logging должен появиться хотя бы один handler
-    assert lu.logger.level == logging.DEBUG
-    assert len(lu.logger.handlers) == 1
-    handler = lu.logger.handlers[0]
-    # handler пишет в stdout (StreamHandler)
-    assert isinstance(handler, logging.StreamHandler)
-
-
-def test_log_info_uses_logger_info(monkeypatch):
-    import app.logging_utils as lu
-
-    calls = []
-
-    def fake_info(msg):
-        calls.append(msg)
-
-    monkeypatch.setattr(lu.logger, "info", fake_info)
-
-    lu.log_info("hello info")
-
-    assert calls == ["hello info"]
+    handlers = logging_utils.logger.handlers
+    # один хендлер, и это StreamHandler (stdout)
+    assert len(handlers) == 1
+    assert isinstance(handlers[0], logging.StreamHandler)
 
 
-def test_log_warning_uses_logger_warning(monkeypatch):
-    import app.logging_utils as lu
+def test_setup_logging_with_file_logging(tmp_path, monkeypatch):
+    """
+    При включённом файловом логировании добавляются два RotatingFileHandler:
+    - app.log (INFO+)
+    - error.log (WARNING+)
+    """
+    from app import logging_utils
 
-    calls = []
+    monkeypatch.setenv("NEWS_BOT_FILE_LOGGING", "1")
+    monkeypatch.setenv("NEWS_BOT_LOG_DIR", str(tmp_path))
 
-    def fake_warning(msg):
-        calls.append(msg)
+    # на всякий случай опустим лимиты, но это не критично
+    monkeypatch.setenv("NEWS_BOT_APP_LOG_MAX_BYTES", "1024")
+    monkeypatch.setenv("NEWS_BOT_ERROR_LOG_MAX_BYTES", "1024")
+    monkeypatch.setenv("NEWS_BOT_APP_LOG_BACKUP_COUNT", "1")
+    monkeypatch.setenv("NEWS_BOT_ERROR_LOG_BACKUP_COUNT", "1")
 
-    monkeypatch.setattr(lu.logger, "warning", fake_warning)
+    logging_utils.setup_logging()
 
-    lu.log_warning("something happened")
+    handlers = logging_utils.logger.handlers
+    # stdout + 2 файловых хендлера как минимум
+    assert len(handlers) >= 3
 
-    assert calls == ["something happened"]
+    file_handlers = [h for h in handlers if isinstance(h, RotatingFileHandler)]
+    assert len(file_handlers) == 2
 
+    # Логируем, чтобы файлы физически создались
+    logging_utils.log_info("test info")
+    logging_utils.log_warning("test warning")
 
-def test_log_error_without_alert(monkeypatch):
-    import app.logging_utils as lu
+    # Проверяем, что нужные файлы появились
+    app_log = tmp_path / "app.log"
+    error_log = tmp_path / "error.log"
 
-    logged = []
-
-    def fake_error(msg):
-        logged.append(msg)
-
-    # Подменяем только logger.error, send_error_alert не должен вызываться
-    monkeypatch.setattr(lu.logger, "error", fake_error)
-
-    lu.log_error("simple error", alert=False)
-
-    assert logged == ["simple error"]
-
-
-def test_log_error_with_alert_success(monkeypatch):
-    import app.logging_utils as lu
-
-    logged = []
-    alerts = []
-
-    def fake_error(msg):
-        logged.append(msg)
-
-    def fake_send_error_alert(msg):
-        alerts.append(msg)
-
-    monkeypatch.setattr(lu.logger, "error", fake_error)
-    monkeypatch.setattr(lu, "send_error_alert", fake_send_error_alert)
-
-    lu.log_error("fatal error", alert=True)
-
-    # Сначала логируем основное сообщение
-    assert "fatal error" in logged[0]
-    # Затем вызывается send_error_alert
-    assert alerts == ["fatal error"]
-    # Дополнительных ошибок не должно быть
-    assert len(logged) == 1
+    assert app_log.exists()
+    assert error_log.exists()
 
 
-def test_log_error_with_alert_failure(monkeypatch):
-    import app.logging_utils as lu
+def test_log_error_sends_alert(monkeypatch):
+    """
+    При alert=True должен вызываться send_error_alert с переданным текстом.
+    """
+    from app import logging_utils
 
-    logged = []
+    captured = {}
 
-    def fake_error(msg):
-        logged.append(msg)
+    def fake_send_alert(msg: str) -> None:
+        captured["msg"] = msg
 
-    def fake_send_error_alert(msg):
-        raise RuntimeError("boom")
+    # В модуле logging_utils send_error_alert уже импортирован,
+    # поэтому патчим именно его.
+    monkeypatch.setattr(logging_utils, "send_error_alert", fake_send_alert)
 
-    monkeypatch.setattr(lu.logger, "error", fake_error)
-    monkeypatch.setattr(lu, "send_error_alert", fake_send_error_alert)
+    logging_utils.setup_logging()
+    logging_utils.log_error("boom", alert=True)
 
-    lu.log_error("critical error", alert=True)
+    assert captured["msg"] == "boom"
 
-    # Первое сообщение — оригинальная ошибка
-    assert "critical error" in logged[0]
-    # Второе сообщение — текст из except
-    assert any("Не удалось отправить алерт в Telegram" in m for m in logged[1:])
+
+def test_log_error_alert_failure_is_swallowed(monkeypatch):
+    """
+    Если send_error_alert падает, log_error не должен ронять приложение.
+    """
+    from app import logging_utils
+
+    def failing_alert(msg: str) -> None:
+        raise RuntimeError("alert failed")
+
+    monkeypatch.setattr(logging_utils, "send_error_alert", failing_alert)
+
+    logging_utils.setup_logging()
+    # Если здесь не выброшено исключение — всё ок, защитный try/except отработал.
+    logging_utils.log_error("oops", alert=True)
+
+
+def test_setup_logging_handles_log_dir_error(monkeypatch, capsys):
+    """
+    Если не удалось создать директорию логов (например, нет прав),
+    setup_logging не должен падать и должен написать сообщение в stderr.
+    """
+    from app import logging_utils
+
+    monkeypatch.setenv("NEWS_BOT_FILE_LOGGING", "1")
+
+    def raise_makedirs(path, exist_ok=False):
+        raise OSError("no permission")
+
+    monkeypatch.setattr(logging_utils.os, "makedirs", raise_makedirs)
+
+    logging_utils.setup_logging()
+
+    captured = capsys.readouterr()
+    # Сообщение из print(...) в except-блоке
+    assert "Не удалось настроить файловое логирование" in captured.err
