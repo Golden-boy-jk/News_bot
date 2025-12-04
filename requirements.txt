@@ -8,3 +8,5 @@ pytz
 scikit-learn==1.5.0
 pytest
 pytest-cov
+pytz
+deep-translator
