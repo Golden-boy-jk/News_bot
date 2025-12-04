@@ -96,6 +96,66 @@ def test_fetch_text_content_retry_success(monkeypatch):
     assert "OK" in content
     assert calls["n"] == 2
 
+def test_fetch_text_content_inserts_title_if_missing_in_lines(monkeypatch):
+    """
+    Если <title> есть, но get_text не возвращает его первой строкой,
+    функция должна вставить заголовок в начало вручную (ветка lines.insert(0, title_text)).
+    """
+    import app.text_parser as tp
+
+    html = "<html><head><title>My Title</title></head><body>Body only</body></html>"
+
+    # 1) Не ходим в сеть
+    monkeypatch.setattr(tp, "_download_with_retry", lambda url, timeout=10: html)
+
+    # 2) Фейковый BeautifulSoup
+    class FakeSoup:
+        def __init__(self, html_text, parser):
+            # имитируем soup.title.string
+            self.title = type("T", (), {"string": "My Title"})()
+
+        def __call__(self, names):
+            # soup(["script", "style", "noscript"]) → ничего не удаляем
+            return []
+
+        def get_text(self, separator="\n", strip=True):
+            # Текст без заголовка — чтобы условие lines[0] != title_text выполнилось
+            return "Body only"
+
+    monkeypatch.setattr(tp, "BeautifulSoup", FakeSoup)
+
+    content = tp.fetch_text_content("https://example.com/title-insert")
+    lines = content.splitlines()
+
+    # Проверяем, что заголовок действительно вставлен первой строкой
+    assert lines[0] == "My Title"
+    assert "Body only" in content
+
+
+
+def test_fetch_text_content_returns_none_for_empty_text(monkeypatch):
+    """
+    HTML после очистки не содержит видимого текста — функция должна вернуть None.
+    """
+    import app.text_parser as tp
+
+    html = """
+    <html>
+      <body>
+        <script>console.log("only script")</script>
+        <style>.cls { color: red; }</style>
+        <noscript>fallback</noscript>
+      </body>
+    </html>
+    """
+
+    # Мокаем _download_with_retry, чтобы не ходить в сеть
+    monkeypatch.setattr(tp, "_download_with_retry", lambda url, timeout=10: html)
+
+    content = tp.fetch_text_content("https://example.com/empty")
+    assert content is None
+
+
 
 def test_download_with_retry_fail(monkeypatch):
     """
@@ -109,3 +169,7 @@ def test_download_with_retry_fail(monkeypatch):
 
     with pytest.raises(RuntimeError):
         tp._download_with_retry("https://example.com", timeout=1, max_attempts=3)
+
+
+
+

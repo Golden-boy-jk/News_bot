@@ -54,9 +54,8 @@ def fetch_text_content(url: str, timeout: int = 10) -> Optional[str]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     if title_text:
-        # вставляем заголовок в начало, если он не дублируется
         if not lines or lines[0] != title_text:
             lines.insert(0, title_text)
 
     cleaned = "\n".join(lines)
-    return cleaned or None # pragma: no cover
+    return cleaned or None

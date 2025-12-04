@@ -3,7 +3,14 @@ addopts = -q --cov=app --cov-report=term-missing:skip-covered --cov-config=.cove
 testpaths = tests
 filterwarnings =
     ignore::DeprecationWarning:telegram\..*
+
+[run]
+source = app
+
 [report]
 omit =
     app/main.py
     app/scheduler_main.py
+    tests/*
+
+
