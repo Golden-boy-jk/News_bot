@@ -333,10 +333,10 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 ```mermaid
 flowchart LR
   S[APScheduler] --> P[NewsProfessor]
-  P --> F[Fetch & Parse]
-  F --> R[Rank (TF-IDF/keywords)]
+  P --> F["Fetch & Parse"]
+  F --> R["Rank (TF-IDF / keywords)"]
   R --> D[(SQLite)]
-  D --> T[Telegram Post]
+  D --> T["Telegram Post"]
   D --> M[Monitoring]
-  M --> A[Alert to Telegram]
+  M --> A["Alert to Telegram"]
 
