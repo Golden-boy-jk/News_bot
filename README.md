@@ -339,4 +339,4 @@ flowchart LR
   D --> T[Telegram Post]
   D --> M[Monitoring]
   M --> A[Alert to Telegram]
-```
+
