@@ -6,6 +6,7 @@ from app.telegram_bot import (
     format_weekly_digest_message,
     send_message,
     split_title_and_body,
+    _safe_url,
 )
 
 
@@ -54,7 +55,7 @@ def test_send_message_success(monkeypatch):
     sent = dummy_bot.sent[0]
     assert sent["chat_id"] == "12345"
     assert "Hello, world!" in sent["text"]
-    assert sent["parse_mode"] == "Markdown"
+    assert sent["parse_mode"] == "HTML"
 
 
 def test_send_message_telegram_error_logs_and_returns_none(monkeypatch):
@@ -176,3 +177,7 @@ def test_format_news_message_structure():
     assert url in msg
     assert "#AI" in msg
     assert "#OpenAI" in msg
+
+
+def test_safe_url_escapes_quotes():
+    assert _safe_url('https://ex.com/?q="x"&a=1') == "https://ex.com/?q=&quot;x&quot;&amp;a=1"
