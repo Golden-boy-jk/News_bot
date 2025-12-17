@@ -312,7 +312,7 @@ def test_publish_top_news_sorts_and_sends(monkeypatch, tmp_path):
 
     monkeypatch.setattr(np, "format_news_message", fake_format_news_message)
     monkeypatch.setattr(np, "send_message", fake_send_message)
-    monkeypatch.setattr(np, "settings", DummySettings)
+    monkeypatch.setattr(np, "get_settings", lambda: DummySettings)
     monkeypatch.setattr(np, "log_info", lambda msg: None)
     monkeypatch.setattr(np, "log_warning", lambda msg: None)
 
@@ -388,7 +388,7 @@ def test_publish_top_news_source_tags_all_topics(monkeypatch, tmp_path):
     monkeypatch.setattr(np, "format_news_message", fake_format)
     monkeypatch.setattr(np, "send_message", lambda bot_token, chat_id, text: sent.append(text))
     monkeypatch.setattr(
-        np, "settings", type("S", (), {"telegram_bot_token": "T", "telegram_chat_id": "C"})
+        np, "get_settings", type("S", (), {"telegram_bot_token": "T", "telegram_chat_id": "C"})
     )
     monkeypatch.setattr(np, "log_info", lambda msg: None)
 
@@ -668,7 +668,7 @@ def test_run_for_today_sunday_digest(monkeypatch, tmp_path):
 
     infos = []
 
-    monkeypatch.setattr(np, "settings", DummySettings)
+    monkeypatch.setattr(np, "get_settings", DummySettings)
     monkeypatch.setattr(np, "send_message", fake_send_message)
     monkeypatch.setattr(np, "log_info", lambda msg: infos.append(msg))
     monkeypatch.setattr(np, "log_warning", lambda msg: infos.append(msg))

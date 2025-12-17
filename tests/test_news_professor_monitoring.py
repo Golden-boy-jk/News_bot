@@ -1,5 +1,5 @@
 # tests/test_news_professor_monitoring.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def test_run_monitoring_no_news_sends_alert(tmp_path, monkeypatch):
@@ -35,7 +35,7 @@ def test_run_monitoring_stale_news_triggers_alert(tmp_path, monkeypatch):
     db_path = tmp_path / "news.db"
     professor = np.NewsProfessor(db_path=str(db_path))
 
-    old_dt = datetime.utcnow() - timedelta(days=10)
+    old_dt = datetime.now(timezone.utc) - timedelta(days=10)
     fetched_at = old_dt.isoformat()
 
     # Вставляем старую новость с корректной датой
@@ -81,8 +81,8 @@ def test_run_monitoring_fresh_news_no_alert(tmp_path, monkeypatch):
     db_path = tmp_path / "news.db"
     professor = np.NewsProfessor(db_path=str(db_path))
 
-    fresh_dt = datetime.utcnow() - timedelta(days=1)
-    fetched_at = fresh_dt.isoformat()
+    fresh_dt = datetime.now() - timedelta(days=1)  # naive datetime
+    fetched_at = fresh_dt.isoformat()  # без "+00:00"
 
     with get_connection(str(db_path)) as conn:
         conn.execute(

@@ -2,10 +2,11 @@
 from telegram import Bot
 from telegram.error import TelegramError
 
-from .config import settings
+from .config import get_settings
 
 
 def send_error_alert(text: str) -> None:
+    settings = get_settings()
     """
     Отправка алерта об ошибке в отдельный Telegram-чат/канал.
     """

@@ -1,13 +1,14 @@
 # app/config.py
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 
 from dotenv import load_dotenv
 
-load_dotenv()
 
-
-@dataclass
+@dataclass(frozen=True)
 class Settings:
     telegram_bot_token: str
     telegram_chat_id: str
@@ -33,4 +34,11 @@ class Settings:
         )
 
 
-settings = Settings.from_env()
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """
+    Ленивая загрузка настроек (без сайд-эффекта при импорте).
+    load_dotenv() вызываем только когда настройки реально понадобились.
+    """
+    load_dotenv()
+    return Settings.from_env()

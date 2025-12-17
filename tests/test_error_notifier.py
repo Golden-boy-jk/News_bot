@@ -1,8 +1,5 @@
-def test_send_error_alert_success(monkeypatch, capsys):
-    """
-    Happy-path: Bot.send_message вызывается с правильными аргументами,
-    текст режется до 4000 символов.
-    """
+# tests/test_error_notifier.py
+def test_send_error_alert_success(fake_settings, monkeypatch, capsys):
     import app.error_notifier as en
 
     sent = {}
@@ -21,7 +18,7 @@ def test_send_error_alert_success(monkeypatch, capsys):
 
     # подменяем зависимости внутри модуля
     monkeypatch.setattr(en, "Bot", DummyBot)
-    monkeypatch.setattr(en, "settings", DummySettings)
+    monkeypatch.setattr(en, "get_settings", lambda: DummySettings)
 
     long_text = "X" * 10000
     en.send_error_alert(long_text)
@@ -32,7 +29,6 @@ def test_send_error_alert_success(monkeypatch, capsys):
     assert sent["text"].startswith("[ERROR][news-bot] ")
     assert len(sent["text"]) <= 4000
 
-    # ничего не должно быть напечатано в stderr/stdout при успешной отправке
     captured = capsys.readouterr()
     assert "Ошибка отправки" not in captured.out
     assert "Ошибка отправки" not in captured.err
@@ -53,20 +49,17 @@ def test_send_error_alert_telegram_error(monkeypatch, capsys):
             self.token = token
 
         def send_message(self, chat_id: str, text: str):
-            # имитируем падение отправки
             raise DummyError("fail to send")
 
     class DummySettings:
         telegram_bot_token = "TEST_TOKEN"
         error_chat_id = "ERROR_CHAT"
 
-    # Переписываем TelegramError внутри модуля на наш DummyError
     monkeypatch.setattr(en, "TelegramError", DummyError)
     monkeypatch.setattr(en, "Bot", DummyBot)
-    monkeypatch.setattr(en, "settings", DummySettings)
+    monkeypatch.setattr(en, "get_settings", lambda: DummySettings)
 
     en.send_error_alert("boom")
 
     captured = capsys.readouterr()
-    # Сообщение об ошибке должно быть напечатано, но исключение не должно вылетать наружу
     assert "Ошибка отправки error-алерта в Telegram" in captured.out

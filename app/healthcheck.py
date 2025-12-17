@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import sys
 
-from .config import settings
+from .config import get_settings
 from .db import get_connection
 from .logging_utils import log_error, log_info
 
 
 def check_settings() -> bool:
+    settings = get_settings()
     """
     Проверяем, что заданы TELEGRAM_* и DATABASE_PATH.
     Никаких запросов к Telegram, только валидация конфигурации.
@@ -26,6 +27,7 @@ def check_settings() -> bool:
 
 
 def check_db() -> bool:
+    settings = get_settings()
     """
     Простейшая проверка доступности БД:
     - устанавливаем соединение

@@ -1,6 +1,6 @@
 # tests/test_config.py
 import pytest
-
+from app.config import get_settings
 from app import config as cfg
 
 

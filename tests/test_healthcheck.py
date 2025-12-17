@@ -1,3 +1,4 @@
+# tests/test_healthcheck.py
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -8,15 +9,13 @@ def test_healthcheck_ok(monkeypatch):
     calls_info = []
     calls_error = []
 
-    # валидные настройки
     fake_settings = SimpleNamespace(
         telegram_bot_token="token",
         telegram_chat_id="chat",
         database_path="/tmp/news.db",
     )
-    monkeypatch.setattr(hc, "settings", fake_settings)
+    monkeypatch.setattr(hc, "get_settings", lambda: fake_settings)
 
-    # подменяем логеры, чтобы не писать в stdout
     monkeypatch.setattr(hc, "log_info", lambda msg: calls_info.append(msg))
     monkeypatch.setattr(
         hc,
@@ -52,7 +51,8 @@ def test_healthcheck_bad_settings(monkeypatch):
         telegram_chat_id="",
         database_path="",
     )
-    monkeypatch.setattr(hc, "settings", fake_settings)
+    monkeypatch.setattr(hc, "get_settings", lambda: fake_settings)
+
     monkeypatch.setattr(
         hc,
         "log_error",
@@ -74,7 +74,8 @@ def test_healthcheck_db_failure(monkeypatch):
         telegram_chat_id="chat",
         database_path="/tmp/news.db",
     )
-    monkeypatch.setattr(hc, "settings", fake_settings)
+    monkeypatch.setattr(hc, "get_settings", lambda: fake_settings)
+
     monkeypatch.setattr(
         hc,
         "log_error",

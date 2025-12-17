@@ -1,7 +1,7 @@
 # app/db.py
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, List, Optional, Tuple
 
 
@@ -82,7 +82,7 @@ def save_news(
     source: Optional[str],
     score: Optional[float],
 ) -> None:
-    fetched_at = datetime.utcnow().isoformat()
+    fetched_at = datetime.now(timezone.utc).isoformat()
     with get_connection(db_path) as conn:
         conn.execute(
             """
@@ -145,7 +145,7 @@ def get_top_news_for_period(
     Возвращает топ-новости за последние days_back дней по score.
     Используется для воскресного дайджеста.
     """
-    since = (datetime.utcnow() - timedelta(days=days_back)).isoformat()
+    since = (datetime.now(timezone.utc) - timedelta(days=days_back)).isoformat()
 
     with get_connection(db_path) as conn:
         cur = conn.execute(

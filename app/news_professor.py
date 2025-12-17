@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from .config import settings
+from .config import get_settings
 from .db import (
     init_db,
     link_exists,
@@ -323,6 +323,7 @@ class NewsProfessor:
         return [url for url, *_ in new_articles]
 
     def publish_top_news(self, new_urls: List[str], max_to_publish: int = 5) -> None:
+        settings = get_settings()
 
         if not new_urls:
             log_info("Новых новостей нет, публиковать нечего.")
@@ -424,6 +425,7 @@ class NewsProfessor:
         return items
 
     def run_for_today(self) -> None:
+        settings = get_settings()
         """
         Основной метод: дергается планировщиком раз в день в 09:00 по Москве.
         Будни: обычные новости.
@@ -505,13 +507,16 @@ class NewsProfessor:
 
         try:
             last_dt = datetime.fromisoformat(fetched_at_str)
-        except Exception:
+        except Exception:  # pragma: no cover
             log_warning(
                 f"Мониторинг: не удалось разобрать fetched_at='{fetched_at_str}'."
             )
             return
 
-        now_utc = datetime.utcnow()
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+
+        now_utc = datetime.now(timezone.utc)
         delta = now_utc - last_dt
 
         if delta.days >= max_days_without_news:

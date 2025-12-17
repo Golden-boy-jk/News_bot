@@ -1,7 +1,7 @@
 # tests/test_db.py
 import sqlite3
 from typing import List, Tuple
-
+from app.config import get_settings
 from app.db import (
     get_last_news,
     get_news_by_urls,
