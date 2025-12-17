@@ -11,6 +11,8 @@ from .logging_utils import log_error
 from .text_utils import truncate_message
 
 TELEGRAM_MAX_LEN = 4096
+TITLE_MAX_LEN = 200
+BODY_MAX_LEN = 800
 
 
 def _safe(text: str) -> str:
@@ -19,11 +21,11 @@ def _safe(text: str) -> str:
 
 
 def _safe_url(url: str) -> str:
-    """Escape URL for putting into href attribute."""
+    """Escape URL for putting into href attribute / safe representation."""
     return escape(url or "", quote=True)
 
 
-def _chunks(text: str, limit: int = TELEGRAM_MAX_LEN) -> Iterable[str]: # pragma: no cover
+def _chunks(text: str, limit: int = TELEGRAM_MAX_LEN) -> Iterable[str]:  # pragma: no cover
     """
     Split long text into chunks <= limit.
     Prefer splitting by newline to keep readability.
@@ -37,8 +39,13 @@ def _chunks(text: str, limit: int = TELEGRAM_MAX_LEN) -> Iterable[str]: # pragma
     while start < n:
         end = min(start + limit, n)
         cut = text.rfind("\n", start, end)
+
         if cut == -1 or cut <= start + 200:  # avoid too tiny chunks
             cut = end
+
+        if cut <= start:  # safety guard
+            cut = min(start + limit, n)
+
         yield text[start:cut]
         start = cut
 
@@ -48,8 +55,8 @@ def split_title_and_body(content: str) -> Tuple[str, str]:
     if not lines:
         return "Свежая новость из мира IT", ""
 
-    title = lines[0][:200]
-    body = " ".join(lines[1:])[:800]
+    title = lines[0][:TITLE_MAX_LEN]
+    body = " ".join(lines[1:])[:BODY_MAX_LEN]
     return title, body
 
 
@@ -58,8 +65,8 @@ def build_post_html(*, what: str, why: str, source_url: str, humor: str, hashtag
     why_e = _safe(why)
     humor_e = _safe(humor)
     hashtags_e = _safe(hashtags)
-    url_e = _safe(source_url)
 
+    url_e = _safe_url(source_url)
 
     return (
         f"💡 Что произошло: {what_e}\n\n"
@@ -70,16 +77,13 @@ def build_post_html(*, what: str, why: str, source_url: str, humor: str, hashtag
     )
 
 
-def send_message(bot_token: str, chat_id: str, text: str) -> Optional[str]:
+def send_message_via_bot(bot: Bot, chat_id: str, text: str) -> Optional[str]:
     """
-    Единая точка отправки:
+    Чистая точка отправки: удобно тестировать (dependency injection).
     - truncate_message (твоя логика ограничения)
     - chunking по лимиту Telegram
     - HTML parse_mode
     """
-    bot = Bot(token=bot_token)
-
-    # Оставляем твою страховку по длине (если она есть в проекте)
     text = truncate_message(text)
 
     last_message_id: Optional[str] = None
@@ -95,6 +99,15 @@ def send_message(bot_token: str, chat_id: str, text: str) -> Optional[str]:
     except TelegramError as e:
         log_error(f"Ошибка отправки сообщения в Telegram: {e}", alert=True)
         return None
+
+
+def send_message(bot_token: str, chat_id: str, text: str) -> Optional[str]:
+    """
+    Backward-compatible wrapper.
+    Оставляем внешний контракт, чтобы ничего не ломать в проекте.
+    """
+    bot = Bot(token=bot_token) # pragma: no cover
+    return send_message_via_bot(bot, chat_id, text) # pragma: no cover
 
 
 def format_news_message(
@@ -124,7 +137,7 @@ def format_tools_digest_message(tools: List[Dict]) -> str:
     Субботняя подборка тулзов.
     tools: [{title, summary, url, use_case, source_tag}]
     """
-    if not tools: # pragma: no cover
+    if not tools:  # pragma: no cover
         return build_post_html(
             what="На этой неделе не нашёл достойных тулзов для подборки.",
             why="Значит, можно спокойно закрыть техдолг и допилить тесты 😄",
@@ -143,7 +156,6 @@ def format_tools_digest_message(tools: List[Dict]) -> str:
         use_case = tool.get("use_case") or "Поможет упростить жизнь разработчику."
         source_tag = tool.get("source_tag") or "#Tools"
 
-        # Внутри 'what' держим обычный текст — build_post_html сам всё экранирует.
         block = (
             f"{idx}) {title} {source_tag}\n"
             f"   {summary}\n"
@@ -156,7 +168,6 @@ def format_tools_digest_message(tools: List[Dict]) -> str:
     why_important = "Такие инструменты экономят время, снижают рутину и помогают сосредоточиться на фичах."
     humor = "Главное — не поставить все тулзы сразу и не провести выходные в настройке окружения 😅"
 
-    # В поле source_url оставим ссылку на первый инструмент (если есть), чтобы блок 🔗 был кликабельным.
     first_url = tools[0].get("url") or ""
 
     return build_post_html(
@@ -173,7 +184,7 @@ def format_weekly_digest_message(events: List[Dict]) -> str:
     Воскресный дайджест недели.
     events: [{title, summary, url, source_tag}]
     """
-    if not events: # pragma: no cover
+    if not events:  # pragma: no cover
         return build_post_html(
             what="На этой неделе громких новостей почти не было — отличный шанс догнать пет-проекты.",
             why="Даже тишина в новостях — сигнал, что можно спокойно поучиться и поэкспериментировать.",

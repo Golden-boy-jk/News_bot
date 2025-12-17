@@ -1,12 +1,14 @@
 from types import SimpleNamespace
 
+import app.telegram_bot as tb
 from app.telegram_bot import (
+    _safe_url,
+    build_post_html,
     format_news_message,
     format_tools_digest_message,
     format_weekly_digest_message,
     send_message,
     split_title_and_body,
-    _safe_url,
 )
 
 
@@ -16,9 +18,7 @@ class DummyBotSuccess:
         self.sent = []
 
     def send_message(self, chat_id: str, text: str, parse_mode: str = None):
-        # сохраняем параметры отправки, чтобы можно было проверить
         self.sent.append({"chat_id": chat_id, "text": text, "parse_mode": parse_mode})
-        # имитируем объект Message c полем message_id
         return SimpleNamespace(message_id=123)
 
 
@@ -32,20 +32,11 @@ class DummyBotError:
         raise TelegramError("fail")
 
 
-def test_send_message_success(monkeypatch):
-    # подменяем Bot на DummyBotSuccess
-    import app.telegram_bot as tb
-
+def test_send_message_via_bot_success(monkeypatch):
     dummy_bot = DummyBotSuccess(token="TEST_TOKEN")
 
-    def fake_bot(token: str):
-        assert token == "TEST_TOKEN"
-        return dummy_bot
-
-    monkeypatch.setattr(tb, "Bot", fake_bot)
-
-    msg_id = send_message(
-        bot_token="TEST_TOKEN",
+    msg_id = tb.send_message_via_bot(
+        bot=dummy_bot,
         chat_id="12345",
         text="Hello, world!",
     )
@@ -58,11 +49,8 @@ def test_send_message_success(monkeypatch):
     assert sent["parse_mode"] == "HTML"
 
 
-def test_send_message_telegram_error_logs_and_returns_none(monkeypatch):
-    import app.telegram_bot as tb
-
-    # подменяем Bot на DummyBotError
-    monkeypatch.setattr(tb, "Bot", lambda token: DummyBotError(token))
+def test_send_message_via_bot_telegram_error_logs_and_returns_none(monkeypatch):
+    dummy_bot = DummyBotError(token="TEST_TOKEN")
 
     logged = []
 
@@ -71,18 +59,41 @@ def test_send_message_telegram_error_logs_and_returns_none(monkeypatch):
 
     monkeypatch.setattr(tb, "log_error", fake_log_error)
 
-    result = send_message(
-        bot_token="TOKEN",
+    result = tb.send_message_via_bot(
+        bot=dummy_bot,
         chat_id="CHAT",
         text="Some text",
     )
 
     assert result is None
-    assert logged  # что-то залогировали
-    assert logged[0][1] is True  # alert=True
+    assert logged
+
+    msg, alert = logged[0]
+    assert alert is True
+    assert "Ошибка отправки сообщения в Telegram" in msg
+    assert "fail" in msg
 
 
-def test_format_tools_digest_message_structure():
+def test_send_message_via_bot_splits_long_text_into_multiple_messages(monkeypatch):
+    dummy_bot = DummyBotSuccess(token="TEST_TOKEN")
+
+    # чтобы truncate_message не отрезал
+    monkeypatch.setattr(tb, "truncate_message", lambda x: x)
+
+    long_text = "A" * (tb.TELEGRAM_MAX_LEN + 100)
+    msg_id = tb.send_message_via_bot(
+        bot=dummy_bot,
+        chat_id="12345",
+        text=long_text,
+    )
+
+    assert msg_id == "123"
+    assert len(dummy_bot.sent) >= 2
+    assert all(m["parse_mode"] == "HTML" for m in dummy_bot.sent)
+    assert all(len(m["text"]) <= tb.TELEGRAM_MAX_LEN for m in dummy_bot.sent)
+
+
+def test_format_tools_digest_message_structure_and_use_cases():
     tools = [
         {
             "title": "Tool A",
@@ -102,7 +113,7 @@ def test_format_tools_digest_message_structure():
 
     msg = format_tools_digest_message(tools)
 
-    # Проверяем наличие основных блоков формата
+    # базовые блоки формата
     assert "💡 Что произошло:" in msg
     assert "📌 Почему это важно:" in msg
     assert "🔗 Источник:" in msg
@@ -116,11 +127,14 @@ def test_format_tools_digest_message_structure():
     assert "#DevTools" in msg
     assert "#Python" in msg
 
+    # ВАЖНО: юзкейсы реально попали в итоговый текст
+    assert "Юзкейс: Автоматизация deploy." in msg
+    assert "Юзкейс: Статический анализ кода." in msg
+
 
 def test_format_weekly_digest_message_empty_events():
     msg = format_weekly_digest_message([])
 
-    # Фоллбек-сообщение без событий
     assert "громких новостей почти не было" in msg
     assert "💡 Что произошло:" in msg
     assert "📌 Почему это важно:" in msg
@@ -158,7 +172,6 @@ def test_split_title_and_body_basic():
     title, body = split_title_and_body(content)
 
     assert title == "Заголовок"
-    # тело — склеенные строки
     assert "Первая строка текста" in body
     assert "Вторая строка текста" in body
 
@@ -169,7 +182,6 @@ def test_format_news_message_structure():
 
     msg = format_news_message(url=url, content=content, topic_tag="#AI", source_tag="#OpenAI")
 
-    # проверяем наличие ключевых блоков
     assert "💡 Что произошло:" in msg
     assert "📌 Почему это важно:" in msg
     assert "🔗 Источник:" in msg
@@ -181,3 +193,20 @@ def test_format_news_message_structure():
 
 def test_safe_url_escapes_quotes():
     assert _safe_url('https://ex.com/?q="x"&a=1') == "https://ex.com/?q=&quot;x&quot;&amp;a=1"
+
+
+def test_build_post_html_escapes_source_url_with_quotes():
+    # Этот тест ловит регрессию: если в build_post_html снова поставить _safe() вместо _safe_url()
+    url = 'https://ex.com/?q="x"&a=1'
+    msg = build_post_html(
+        what="w",
+        why="y",
+        source_url=url,
+        humor="h",
+        hashtags="#t",
+    )
+
+    # В блоке "Источник" URL должен быть с экранированными кавычками и &
+    assert "🔗 Источник:" in msg
+    assert "&quot;x&quot;" in msg
+    assert "&amp;a=1" in msg
