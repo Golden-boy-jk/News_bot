@@ -74,13 +74,11 @@ def test_send_message_via_bot_telegram_error_logs_and_returns_none(monkeypatch):
     assert "fail" in msg
 
 
-def test_send_message_via_bot_splits_long_text_into_multiple_messages(monkeypatch):
+def test_send_message_via_bot_truncates_long_text(monkeypatch):
     dummy_bot = DummyBotSuccess(token="TEST_TOKEN")
 
-    # чтобы truncate_message не отрезал
-    monkeypatch.setattr(tb, "truncate_message", lambda x: x)
+    long_text = "A" * 10000
 
-    long_text = "A" * (tb.TELEGRAM_MAX_LEN + 100)
     msg_id = tb.send_message_via_bot(
         bot=dummy_bot,
         chat_id="12345",
@@ -88,9 +86,10 @@ def test_send_message_via_bot_splits_long_text_into_multiple_messages(monkeypatc
     )
 
     assert msg_id == "123"
-    assert len(dummy_bot.sent) >= 2
-    assert all(m["parse_mode"] == "HTML" for m in dummy_bot.sent)
-    assert all(len(m["text"]) <= tb.TELEGRAM_MAX_LEN for m in dummy_bot.sent)
+    assert len(dummy_bot.sent) == 1
+    sent_text = dummy_bot.sent[0]["text"]
+    assert len(sent_text) <= tb.TELEGRAM_MAX_LEN
+    assert "сокращ" in sent_text.lower()
 
 
 def test_format_tools_digest_message_structure_and_use_cases():

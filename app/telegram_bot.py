@@ -80,22 +80,19 @@ def build_post_html(*, what: str, why: str, source_url: str, humor: str, hashtag
 def send_message_via_bot(bot: Bot, chat_id: str, text: str) -> Optional[str]:
     """
     Чистая точка отправки: удобно тестировать (dependency injection).
-    - truncate_message (твоя логика ограничения)
-    - chunking по лимиту Telegram
-    - HTML parse_mode
+    По умолчанию:
+    - truncate_message отвечает за лимит Telegram (обрезает мягко)
+    - отправляем 1 сообщение
     """
     text = truncate_message(text)
 
-    last_message_id: Optional[str] = None
     try:
-        for part in _chunks(text):
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=part,
-                parse_mode="HTML",
-            )
-            last_message_id = str(msg.message_id)
-        return last_message_id
+        msg = bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+        )
+        return str(msg.message_id)
     except TelegramError as e:
         log_error(f"Ошибка отправки сообщения в Telegram: {e}", alert=True)
         return None
